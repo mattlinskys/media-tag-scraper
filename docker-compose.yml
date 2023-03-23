@@ -1,0 +1,19 @@
+version: '3.9'
+
+secrets:
+  mail-auth-pass:
+    external: true
+
+services:
+  scraper:
+    build: .
+    depends_on:
+      - redis
+    environment:
+      - REDIS_NAMESPACE=media-scrapper
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+  redis:
+    image: redis:latest
+    ports:
+      - 6379:6379
