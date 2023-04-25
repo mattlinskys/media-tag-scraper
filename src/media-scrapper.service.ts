@@ -1,6 +1,6 @@
 import {
-  CACHE_MANAGER,
-  Inject,
+  // CACHE_MANAGER,
+  // Inject,
   Injectable,
   Logger,
   OnModuleInit,
@@ -11,7 +11,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRedis, Redis } from '@nestjs-modules/ioredis';
 import { lastValueFrom } from 'rxjs';
 import { JSDOM } from 'jsdom';
-import { Cache } from 'cache-manager';
+// import { Cache } from 'cache-manager';
 
 import {
   MEDIAS_STREAM,
@@ -33,8 +33,8 @@ export class MediaScrapperService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService,
-    @Inject(CACHE_MANAGER)
-    private readonly cacheService: Cache,
+    // @Inject(CACHE_MANAGER)
+    // private readonly cacheService: Cache,
     @InjectRedis()
     private readonly redis: Redis,
     private readonly httpService: HttpService,
@@ -51,12 +51,8 @@ export class MediaScrapperService implements OnModuleInit {
     return namespace ? `${namespace}:${key}` : key;
   }
 
-  getTags() {
-    return this.cacheService.wrap(
-      'tags',
-      () => this.redis.smembers(this.getRedisKey(TAGS_SET_KEY)),
-      10 * 60,
-    );
+  private getTags() {
+    return this.redis.smembers(this.getRedisKey(TAGS_SET_KEY));
   }
 
   private getRedditTagListingPage(tag: string) {
@@ -71,14 +67,16 @@ export class MediaScrapperService implements OnModuleInit {
     return `https://api.imgur.com/post/v1/posts/t/${tag}?client_id=546c25a59c58ad7&filter%5Bwindow%5D=week&include=adtiles%2Cadconfig%2Ccover&page=1&sort=-viral`;
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async handleCron() {
     this.logger.verbose('Running cron job');
 
+    const tags = await this.getTags();
+
     await Promise.all([
-      this.scrapReddit(),
-      this.scrap9Gag(),
-      this.scrapImgur(),
+      this.scrapReddit(tags),
+      this.scrap9Gag(tags),
+      this.scrapImgur(tags),
     ]);
   }
 
@@ -143,8 +141,33 @@ export class MediaScrapperService implements OnModuleInit {
     }
   }
 
-  async scrapReddit() {
-    for (const tag of await this.getTags()) {
+  private async publishMedia(medias: TMedia[]) {
+    for (const media of medias) {
+      const [score] = await this.redis.zmscore(
+        this.getRedisKey(PROCESSED_MEDIA_SORTED_LIST),
+        media.id,
+      );
+      if (!score) {
+        await this.redis
+          .multi()
+          .zadd(
+            this.getRedisKey(PROCESSED_MEDIA_SORTED_LIST),
+            'GT',
+            Date.now(),
+            media.id,
+          )
+          .xadd(
+            this.getRedisKey(MEDIAS_STREAM),
+            '*',
+            ...Object.entries(media).flat(),
+          )
+          .exec();
+      }
+    }
+  }
+
+  async scrapReddit(tags: string[]) {
+    for (const tag of tags) {
       try {
         const res = await lastValueFrom(
           this.httpService.get(this.getRedditTagListingPage(tag)),
@@ -186,8 +209,8 @@ export class MediaScrapperService implements OnModuleInit {
     }
   }
 
-  async scrap9Gag() {
-    for (const tag of await this.getTags()) {
+  async scrap9Gag(tags: string[]) {
+    for (const tag of tags) {
       try {
         let posts: I9GagPost[] = [];
         while (posts.length < this.scrapPostListingCount) {
@@ -253,8 +276,8 @@ export class MediaScrapperService implements OnModuleInit {
     }
   }
 
-  async scrapImgur() {
-    for (const tag of await this.getTags()) {
+  async scrapImgur(tags: string[]) {
+    for (const tag of tags) {
       try {
         const {
           data: { posts },
@@ -291,31 +314,6 @@ export class MediaScrapperService implements OnModuleInit {
         }
       } catch (err) {
         this.logger.error('Scraping imgur tag failed', err);
-      }
-    }
-  }
-
-  async publishMedia(medias: TMedia[]) {
-    for (const media of medias) {
-      const [score] = await this.redis.zmscore(
-        this.getRedisKey(PROCESSED_MEDIA_SORTED_LIST),
-        media.id,
-      );
-      if (!score) {
-        await this.redis
-          .multi()
-          .zadd(
-            this.getRedisKey(PROCESSED_MEDIA_SORTED_LIST),
-            'GT',
-            Date.now(),
-            media.id,
-          )
-          .xadd(
-            this.getRedisKey(MEDIAS_STREAM),
-            '*',
-            ...Object.entries(media).flat(),
-          )
-          .exec();
       }
     }
   }

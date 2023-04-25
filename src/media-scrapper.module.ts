@@ -1,6 +1,9 @@
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { HttpModule } from '@nestjs/axios';
-import { CacheModule, Module } from '@nestjs/common';
+import {
+  // CacheModule,
+  Module,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -13,7 +16,7 @@ import { MediaScrapperService } from './media-scrapper.service';
     ConfigModule.forRoot({
       load: [appConfig, redisConfig],
     }),
-    CacheModule.register(),
+    // CacheModule.register(),
     HttpModule,
     ScheduleModule.forRoot(),
     RedisModule.forRootAsync({
