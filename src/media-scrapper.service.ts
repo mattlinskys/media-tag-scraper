@@ -46,7 +46,20 @@ export class MediaScrapperService implements OnModuleInit {
     }
   }
 
-  getRedisKey(key: string) {
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async handleCron() {
+    this.logger.verbose('Running cron job');
+
+    const tags = await this.getTags();
+
+    await Promise.all([
+      this.scrapReddit(tags),
+      this.scrap9Gag(tags),
+      this.scrapImgur(tags),
+    ]);
+  }
+
+  private getRedisKey(key: string) {
     const namespace = this.configService.get('app.redisNamespace') as string;
     return namespace ? `${namespace}:${key}` : key;
   }
@@ -65,19 +78,6 @@ export class MediaScrapperService implements OnModuleInit {
 
   private getImgurTagListingPage(tag: string) {
     return `https://api.imgur.com/post/v1/posts/t/${tag}?client_id=546c25a59c58ad7&filter%5Bwindow%5D=week&include=adtiles%2Cadconfig%2Ccover&page=1&sort=-viral`;
-  }
-
-  @Cron(CronExpression.EVERY_10_MINUTES)
-  async handleCron() {
-    this.logger.verbose('Running cron job');
-
-    const tags = await this.getTags();
-
-    await Promise.all([
-      this.scrapReddit(tags),
-      this.scrap9Gag(tags),
-      this.scrapImgur(tags),
-    ]);
   }
 
   private async scrapMediaFromRedditPost(href: string): Promise<TMedia> {
@@ -166,8 +166,22 @@ export class MediaScrapperService implements OnModuleInit {
     }
   }
 
+  // Delay between tag requests to prevent triggering limiters
+  private async loopWithRandDelay<T>(
+    items: T[],
+    process: (item: T) => Promise<any>,
+    [min, max]: [number, number] = [1000, 2000],
+  ) {
+    for (const item of items) {
+      await process(item);
+      await new Promise((resolve) =>
+        setTimeout(resolve, min + Math.random() * (max - min)),
+      );
+    }
+  }
+
   async scrapReddit(tags: string[]) {
-    for (const tag of tags) {
+    await this.loopWithRandDelay(tags, async (tag) => {
       try {
         const res = await lastValueFrom(
           this.httpService.get(this.getRedditTagListingPage(tag)),
@@ -206,11 +220,11 @@ export class MediaScrapperService implements OnModuleInit {
       } catch (err) {
         this.logger.error('Scraping reddit tag failed', err);
       }
-    }
+    });
   }
 
   async scrap9Gag(tags: string[]) {
-    for (const tag of tags) {
+    await this.loopWithRandDelay(tags, async (tag) => {
       try {
         let posts: I9GagPost[] = [];
         while (posts.length < this.scrapPostListingCount) {
@@ -273,11 +287,11 @@ export class MediaScrapperService implements OnModuleInit {
       } catch (err) {
         this.logger.error('Scraping 9gag tag failed', err);
       }
-    }
+    });
   }
 
   async scrapImgur(tags: string[]) {
-    for (const tag of tags) {
+    await this.loopWithRandDelay(tags, async (tag) => {
       try {
         const {
           data: { posts },
@@ -315,6 +329,6 @@ export class MediaScrapperService implements OnModuleInit {
       } catch (err) {
         this.logger.error('Scraping imgur tag failed', err);
       }
-    }
+    });
   }
 }
