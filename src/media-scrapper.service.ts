@@ -69,7 +69,7 @@ export class MediaScrapperService implements OnModuleInit {
   }
 
   private getRedditTagListingPage(tag: string) {
-    return `https://old.reddit.com/r/${tag}`;
+    return `https://old.reddit.com/r/${tag}/top`;
   }
 
   private get9GagTagListingPage(tag: string, offset = 0) {
