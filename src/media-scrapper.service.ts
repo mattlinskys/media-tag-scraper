@@ -41,23 +41,47 @@ export class MediaScrapperService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    if (!this.configService.get('app.isProd')) {
-      await this.handleCron();
-    }
+    // if (!this.configService.get('app.isProd')) {
+    //   await this.handleCron();
+    // }
   }
 
   @Cron(CronExpression.EVERY_30_MINUTES)
-  async handleCron() {
-    this.logger.verbose('Running cron job');
+  async handleRedditCron() {
+    this.logger.verbose('Running reddit CRON job');
 
     const tags = await this.getTags();
-
-    await Promise.all([
-      this.scrapReddit(tags),
-      this.scrap9Gag(tags),
-      this.scrapImgur(tags),
-    ]);
+    await this.scrapReddit(tags);
   }
+
+  @Cron('10-59/30 * * * *')
+  async handle9GagCron() {
+    this.logger.verbose('Running 9gag CRON job');
+
+    const tags = await this.getTags();
+    await this.scrap9Gag(tags);
+  }
+
+  @Cron('20-59/30 * * * *')
+  async handleImgurCron() {
+    this.logger.verbose('Running imgur CRON job');
+
+    const tags = await this.getTags();
+    await this.scrapImgur(tags);
+  }
+
+  // @Cron(CronExpression.EVERY_10_MINUTES)
+  // async handleCron() {
+  //   this.logger.verbose('Running cron job');
+
+  //   const tags = await this.getTags();
+
+  //   await Promise.all([
+  //     this.scrapReddit(tags),
+  //     this.scrap9Gag(tags),
+  //     this.scrapImgur(tags),
+  //   ]);
+  // }
 
   private getRedisKey(key: string) {
     const namespace = this.configService.get('app.redisNamespace') as string;
