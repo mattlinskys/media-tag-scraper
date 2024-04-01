@@ -20,7 +20,7 @@ import { MediaScrapperService } from './media-scrapper.service';
     // CacheModule.register(),
     HttpModule.registerAsync({
       useFactory: (configService: ConfigService) => {
-        const socksProxyUrl = configService.get('app.configService');
+        const socksProxyUrl = configService.get('app.socksProxyUrl');
         const proxyAgent = socksProxyUrl
           ? new SocksProxyAgent(socksProxyUrl)
           : null;
